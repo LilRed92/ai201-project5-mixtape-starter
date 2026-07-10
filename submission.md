@@ -336,3 +336,26 @@ graph TD
 2. **Routes are Self-contained** - Much like the layers themselves each route blueprint (songs, playlists, users, feed) is self-contained within the corresponding file for that route.
 
 3. **Model Default PK** - Each model utilizes UUID for it's primary key as opposed to incremental integers.
+
+
+## 📋 Root Cause Analysis of Bugs
+
+### First Bug:
+1. **Issue number and title:**
+#1 - "My listening streak keeps resetting"
+
+2. **How you reproduced it** — What steps did you take to confirm the bug exists before touching any code? What inputs, sequence of actions, or data condition triggered the behavior?
+
+   After seeding the database (`python seed_data.py`), I confirmed the `/users/<id>/streak` endpoint returned kenji's streak of 12. To replicate the exact state described, I used `sqlite3` to set `last_listened_at` to a Saturday (`2024-06-15 20:00:00`) and `listening_streak` to 12 directly in the database. I then temporarily set the system clock to Sunday June 16, 2024 and hit `POST /songs/<song_id>/listen` with kenji's user ID. Checking the streak endpoint immediately after returned `1` instead of `13`. Repeating the same experiment with a Friday → Saturday transition (same gap, different days) returned the correct incremented value, which confirmed the reset was specific to Sunday and not a general off-by-one in the date comparison.
+
+3. **How you found the root cause** — Which files did you look at? What was your navigation path? What moment made you confident you'd found the right place — not just a suspicious area, but the specific cause?
+
+    Since the issue was with the user's streak I immediately went searching in streak_service.py specifically looking for logic related to dates or days. I knew I was in the general area of the bug when I hit `last_date = last_listened.date()`. I knew I had found the bug itself when I reached `elif days_since_last == 1 and today.weekday() != 6:` before I even fully read through and understood the logic. I knew something was off about this part. Asking myself, "Why would this need `and`?" Then thinking on it further, hypothesizing that it were Saturday and the code just ran, well, the logic would automatically go to the next `else` statement found.
+
+4. **The root cause** — In plain English, explain exactly what was wrong. Not "there was a bug in the streak logic" — explain the specific condition, comparison, or missing step that caused the problem.
+
+    The issue was with the fact that the code reads out 'if days last since = 1 AND today is not day 6`. Meaning that even if someone's streak was 1, if they were adding to the streak on Saturday (day 6 of the week) it would default to the next else and restart their streak.
+
+5. **Your fix and side-effect check** — What did you change and why does that change fix the root cause? What related functionality did you check afterward to confirm you didn't break anything?
+
+    This was a very simple fix. All I had to do was remove the `and today.weekday() != 6` portion of line 73 in `streak_service.py`. The logic will still work correctly without adding anything else to that line. It only needs to know how many days since, not what day it is or isn't. I then ran `pytest tests/test_streaks.py::test_streak_increments_on_sunday -v` and ` pytest tests/test_streaks.py -v` first to ensure that nothing was broken via testing. Then, I ran each of the individual tests to ensure that they all still worked as expected.
