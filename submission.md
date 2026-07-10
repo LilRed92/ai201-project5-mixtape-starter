@@ -359,3 +359,23 @@ graph TD
 5. **Your fix and side-effect check** — What did you change and why does that change fix the root cause? What related functionality did you check afterward to confirm you didn't break anything?
 
     This was a very simple fix. All I had to do was remove the `and today.weekday() != 6` portion of line 73 in `streak_service.py`. The logic will still work correctly without adding anything else to that line. It only needs to know how many days since, not what day it is or isn't. I then ran `pytest tests/test_streaks.py::test_streak_increments_on_sunday -v` and ` pytest tests/test_streaks.py -v` first to ensure that nothing was broken via testing. Then, I ran each of the individual tests to ensure that they all still worked as expected.
+
+### Second Bug:
+1. **Issue number and title:**
+#2 - "Friends Listening Now shows people from yesterday"
+
+2. **How you reproduced it** — What steps did you take to confirm the bug exists before touching any code? What inputs, sequence of actions, or data condition triggered the behavior?
+
+  I grabbed nova and darius's IDs from the database. Used `sqlite3` to set darius's most recent listening event to 10 hours ago, simulating him having listened the previous evening,(I was testing this in the morning, so 10 hours ago was the previous night) then checked `GET /feed/<nova_id>/listening-now`. He was still showing up. I then changed his listening event to 25 hours ago and checked the endpoint again and he dropped off. That put the cutoff somewhere around 24 hours, not tied to the current calendar day the way a "listening now" feed should be.
+
+3. **How you found the root cause** — Which files did you look at? What was your navigation path? What moment made you confident you'd found the right place — not just a suspicious area, but the specific cause?
+
+   Since the bug was about what the app considered "recent," I went looking in the services layer for anything related to the listening-now feed. Found a constant called `RECENT_THRESHOLD` set to `timedelta(hours=24)`. That was it. A 24-hour window means a friend who listened at 11pm stays in the feed until 11pm the following night, not until midnight like you'd expect from a "listening now" feature.
+
+4. **The root cause** — In plain English, explain exactly what was wrong. Not "there was a bug in the streak logic" — explain the specific condition, comparison, or missing step that caused the problem.
+
+   The cutoff for what counted as "recent" was a 24-hour window subtracted from the current moment rather than the start of the current calendar day. `timedelta(hours=24)` subtracted from `now` gives a point exactly 24 hours in the past, so a listen at 11pm stays "recent" all the way through 11pm the next night. It needed to be anchored to midnight of the current day.
+
+5. **Your fix and side-effect check** — What did you change and why does that change fix the root cause? What related functionality did you check afterward to confirm you didn't break anything?
+
+   I removed `RECENT_THRESHOLD` entirely and replaced the `cutoff` line inside `get_friends_listening_now` with `datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)`. Before changing anything I used AI to understand what `timedelta` is versus a `datetime`, and to check what different approaches would output depending on when the calculation runs. I also ran my proposed fix by AI to confirm it would land on midnight before touching the code. After applying it I restarted the server, re-ran the sqlite3 setup, and confirmed darius was gone from nova's feed. I also checked `GET /feed/<id>/activity` since it uses the same service file. That endpoint is intentionally not time-filtered so it should be unaffected, and it was.
