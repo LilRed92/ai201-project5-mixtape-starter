@@ -24,7 +24,11 @@ def search_songs(query: str) -> list[dict]:
     """
     results = (
         db.session.query(Song)
-        .outerjoin(song_tags, Song.id == song_tags.c.song_id)
+        # Dropped the outerjoin on song_tags. It multiplied rows (one per tag) and fed
+        # nothing into the output, the tags come from the relationship in to_dict(). The
+        # legacy query() hides those dupes, but they'd come back if this ever moves to
+        # db.session.execute(select()). Leave it out.
+        # .outerjoin(song_tags, Song.id == song_tags.c.song_id)
         .filter(
             db.or_(
                 Song.title.ilike(f"%{query}%"),
