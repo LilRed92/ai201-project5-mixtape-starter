@@ -1,5 +1,15 @@
 # Mixtape — Submission
 
+## AI Usage
+
+I leaned on AI mostly for codebase navigation and for understanding the parts of the stack I was shaky on, not for handing me answers. Most of what I asked fell into two buckets: "walk me through how data actually moves through this function or endpoint," and "explain this specific SQLAlchemy behavior."
+
+On the concept side, it helped me understand how the ORM relationships and queries actually behave. For the search bug that meant walking `search_songs` line by line, what `.outerjoin` does to the row count, what `.all()` returns, how `to_dict()` pulls tags off the `tags` relationship, and the difference between `lazy="subquery"` loading and a plain per-row load. For the streak and feed bugs it helped me get clear on `timedelta` versus `datetime` and what anchoring a cutoff to midnight versus a rolling 24 hours would actually produce depending on when the code runs. For the playlist bug it helped me name the shape of the symptom, one missing item that always sits at the end of an ordered list points at a slicing or boundary problem, which is what sent me to read the return line closely.
+
+Where I had to verify or override it, the search duplicates bug is the clearest case. The AI's step by step SQL trace showed the `.outerjoin` producing three rows for a three-tag song and framed the reported duplicates as real and reproducible. When I ran the existing tests they all passed, which directly contradicted that trace. The explanation had been incomplete, it described the SQL correctly but left out that the legacy `db.session.query()` API de-duplicates entities before returning them. I only reached the real answer by trusting the passing tests over the trace and then working the logic back through with AI until the de-duplication piece came out, which flipped my whole conclusion for that issue: the bug was not actually reproducible on the current code.
+
+I verified things myself throughout rather than taking explanations at face value. That meant running the `pytest` suites for a real pass/fail baseline before and after any change, querying the database directly with `sqlite3` to check counts and rule out duplicate rows, and re-hitting the endpoints to confirm the fix held. For the playlist bug specifically, AI helped me narrow down where to look, but I spotted the exact `[:-1]` slice and the fix myself, and the failing tests were what confirmed it.
+
 ## Codemap
 
 ### Main files
