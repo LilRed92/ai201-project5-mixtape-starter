@@ -4,6 +4,7 @@ __pycache__/
 *.pyo
 *.pyd
 *.pyc
+.pytest_cache/
 
 # Virtual environment
 .venv/
@@ -29,3 +30,10 @@ build/
 # Editor
 .vscode/
 .idea/
+
+
+# User
+.agents/
+.history/
+.claude/
+.codeviz/
